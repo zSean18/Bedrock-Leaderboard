@@ -1,4 +1,4 @@
-# BedrockLeaderboardFinal
+# Bedrock Leaderboard
 
 A work-in-progress Paper/Spigot plugin that renders multiple bedrock-based leaderboards (Diamonds, Elytra distance, etc.) with unique effects and features.
 
@@ -10,12 +10,12 @@ A work-in-progress Paper/Spigot plugin that renders multiple bedrock-based leade
   _(Players must right-click the bedrock with a phantom membrane in hand.)_
 
 ## Future Updates
-- **Loot Boxes Opened** — for a custom lootbox plugin made for our server.  
+- **Loot Boxes Opened** — leaderboard for a custom lootbox plugin made for our server.  
   _(This will basically be a "specific block placed" leaderboard so it can easily be adapted to any block.)_
 
-- **Blocks Mined** — tracking the player stat for blocks mined with a pickaxe.  
-- **Distance on Foot** — tracking the distance players have traveled on the ground.  
-- **Seeds Planted** — counting the number of seeds players have used.  
+- **Blocks Mined** — leaderboard that tracks the player stat for blocks mined with a pickaxe.  
+- **Distance on Foot** — leaderboard that tracks the distance players have traveled on the ground.  
+- **Seeds Planted** — leaderboard that tracks the number of seeds players have used.  
 - Add custom rotation amounts for the text.  
 
 ## Commands (OP Only)
