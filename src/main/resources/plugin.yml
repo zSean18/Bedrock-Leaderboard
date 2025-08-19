@@ -1,0 +1,56 @@
+name: BedrockLeaderboardFinal
+version: '1.0'
+main: elevate.bedrockLeaderboardFinal.BedrockLeaderboardFinal
+api-version: '1.21'
+
+commands:
+  setleaderboard:
+    description: Assign a leaderboard to the bedrock you're looking at
+    usage: /setleaderboard <type>
+    permission: leaderboard.set
+    permission-message: You don't have permission to do that.
+
+  clearleaderboard:
+    description: Clear the leaderboard assigned to the bedrock you're looking at
+    usage: /clearleaderboard
+    permission: leaderboard.clear
+    permission-message: You don't have permission to do that.
+
+  refreshleaderboard:
+    description: Refresh the leaderboard you’re looking at
+    usage: /refreshleaderboard
+    permission: leaderboard.refresh
+    permission-message: You don't have permission to do that.
+
+  rotateleaderboard:
+    description: Rotate the leaderboard text around the vertical axis
+    usage: /rotateleaderboard [degrees]
+    permission: leaderboard.rotate
+    permission-message: You don't have permission to do that.
+
+  refreshloot:
+    description: Reload leaderboard data.yml from disk and refresh displays
+    usage: /refreshloot
+    permission: leaderboard.reload
+    permission-message: You don't have permission to do that.
+
+permissions:
+  leaderboard.set:
+    description: Allows setting leaderboard blocks
+    default: op
+
+  leaderboard.clear:
+    description: Allows clearing leaderboard blocks
+    default: op
+
+  leaderboard.rotate:
+    description: Allows rotating leaderboard text
+    default: op
+
+  leaderboard.reload:
+    description: Allows reloading leaderboard data from disk
+    default: op
+
+  leaderboard.refresh:
+    description: Allow refreshing a leaderboard
+    default: op
