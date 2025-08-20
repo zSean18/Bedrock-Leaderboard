@@ -3,7 +3,9 @@ package elevate.bedrockLeaderboardFinal;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -18,24 +20,23 @@ import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.block.Block;
+import org.bukkit.Statistic;
 import java.io.IOException;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import java.io.File;
 import org.bukkit.*;
-
 import java.util.*;
 
 public final class BedrockLeaderboardFinal extends JavaPlugin implements Listener
 {
-
     private final Map<String, BukkitTask> activeEffects = new HashMap<>();
     private File dataFile;
     private FileConfiguration dataConfig;
     private Location leaderboardBlockLocation;
     private final Map<String, String> lastTopByType = new HashMap<>();
 
-    //passive effect registry
+    //passive effect
     private interface Effect
     {
         void tick(World w, Location origin, double t);
@@ -69,8 +70,14 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
     private boolean isLeaderboardEntity(Entity e)
     {
         Set<String> tags = e.getScoreboardTags();
-        if (tags.contains("diamond_leaderboard")) return true; // for old build, can probably delete soon
-        for (String t : tags) if (t.endsWith("_leaderboard")) return true;
+
+        // for old build, can probably delete soon
+        if (tags.contains("diamond_leaderboard"))
+            return true;
+
+        for (String t : tags) if (t.endsWith("_leaderboard"))
+            return true;
+
         return false;
     }
 
@@ -82,20 +89,22 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
         registerEffects();
         startArmorStandVisibilityTask();
 
-        //leaderboard types
-        final List<String> TYPES = Arrays.asList("diamond", "elytra");
+        //LEADERBOARD TYPES//
+        final List<String> TYPES = Arrays.asList("diamond", "elytra", "reinforced");
 
         //COMMAND// setleaderboard <type>
         Objects.requireNonNull(getCommand("setleaderboard")).setExecutor((sender, command, label, args) ->
         {
             if (!(sender instanceof Player p))
             {
-                sender.sendMessage(ChatColor.RED + "Players only."); return true;
+                sender.sendMessage(ChatColor.RED + "Players only");
+                return true;
             }
 
             if (!p.isOp() && !p.hasPermission("leaderboard.set"))
             {
-                p.sendMessage(ChatColor.RED + "You don't have permission to do that"); return true;
+                p.sendMessage(ChatColor.RED + "You don't have permission to do that");
+                return true;
             }
 
             if (args.length < 1)
@@ -114,8 +123,17 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
             }
 
             Block target = p.getTargetBlockExact(6);
-            if (target == null) { p.sendMessage(ChatColor.RED + "Look at a bedrock block within 6 blocks."); return true; }
-            if (target.getType() != Material.BEDROCK) { p.sendMessage(ChatColor.RED + "That's not bedrock silly"); return true; }
+
+            if (target == null)
+            {
+                p.sendMessage(ChatColor.RED + "Look at a bedrock block within 6 blocks.");
+                return true;
+            }
+
+            if (target.getType() != Material.BEDROCK)
+            {
+                p.sendMessage(ChatColor.RED + "That's not bedrock silly"); return true;
+            }
 
             //save location/yaw per type
             Location loc = target.getLocation();
@@ -148,12 +166,14 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
         {
             if (!(sender instanceof Player p))
             {
-                sender.sendMessage(ChatColor.RED + "Players only."); return true;
+                sender.sendMessage(ChatColor.RED + "Players only");
+                return true;
             }
 
             if (!p.isOp() && !p.hasPermission("leaderboard.refresh"))
             {
-                p.sendMessage(ChatColor.RED + "You don't have permission to do this"); return true;
+                p.sendMessage(ChatColor.RED + "You don't have permission to do that");
+                return true;
             }
 
             Block target = p.getTargetBlockExact(6);
@@ -175,7 +195,7 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
             String type = typeOpt.get();
             updateLeaderboardDisplay(type);
             startBedrockEffect(loc.clone(), type);
-            p.sendMessage(ChatColor.GREEN + "Refreshed the " + ChatColor.AQUA + type + ChatColor.GREEN + " leaderboard.");
+            p.sendMessage(ChatColor.GREEN + "Refreshed the " + ChatColor.AQUA + type + ChatColor.GREEN + " leaderboard");
             return true;
         });
 
@@ -184,12 +204,14 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
         {
             if (!(sender instanceof Player player))
             {
-                sender.sendMessage(ChatColor.RED + "Players only."); return true;
+                sender.sendMessage(ChatColor.RED + "Players only");
+                return true;
             }
 
             if (!player.isOp() && !player.hasPermission("leaderboard.rotate"))
             {
-                player.sendMessage(ChatColor.RED + "You don't have permission."); return true;
+                player.sendMessage(ChatColor.RED + "You don't have permission to do that");
+                return true;
             }
 
             float deltaYaw = 90f;
@@ -203,7 +225,8 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
 
                 catch (NumberFormatException nfe)
                 {
-                    player.sendMessage(ChatColor.RED + "Usage: /rotateleaderboard [degrees]"); return true;
+                    player.sendMessage(ChatColor.RED + "Usage: /rotateleaderboard [degrees]");
+                    return true;
                 }
             }
 
@@ -219,7 +242,7 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
 
             if (typeOpt.isEmpty())
             {
-                player.sendMessage(ChatColor.GRAY + "No leaderboard is assigned to this bedrock."); return true;
+                player.sendMessage(ChatColor.GRAY + "No leaderboard is assigned to this bedrock"); return true;
             }
 
             String type = typeOpt.get();
@@ -233,7 +256,9 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
             int rotated = 0;
             for (Entity e : base.getWorld().getNearbyEntities(base, 1.5, 3.0, 1.5))
             {
-                if (!isLeaderboardEntity(e)) continue;
+                if (!isLeaderboardEntity(e))
+                    continue;
+
                 try
                 {
                     if (e instanceof TextDisplay td)
@@ -242,10 +267,15 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                         {
                             td.setRotation(newStored, 0f);
                         }
-                        catch (Throwable ignored) {} rotated++; continue;
+
+                        catch (Throwable ignored) {} rotated++;
+
+                        continue;
                     }
                 }
+
                 catch (Throwable ignored) {}
+
                 if (e instanceof ArmorStand as)
                 {
                     Location l = as.getLocation().clone();
@@ -256,21 +286,24 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
             }
 
             player.sendMessage(ChatColor.GREEN + "Rotation set to " + ChatColor.AQUA + newStored + "°" + ChatColor.GREEN + " for " + ChatColor.AQUA + type + ChatColor.GREEN + " (" + rotated + " line(s) updated).");
-            if (rotated == 0) player.sendMessage(ChatColor.YELLOW + "No leaderboard text found near that bedrock.");
+
+            if (rotated == 0)
+                player.sendMessage(ChatColor.YELLOW + "No leaderboard text found near that bedrock");
+
             return true;
         });
 
-        //COMMAND// refreshloot (reload data.yml from plugin's folder
+        //COMMAND// refreshloot (reload data.yml from plugin's folder)
         Objects.requireNonNull(getCommand("refreshloot")).setExecutor((sender, cmd, label, args) ->
         {
             if (!(sender instanceof Player p))
             {
-                sender.sendMessage(ChatColor.RED + "Players only."); return true;
+                sender.sendMessage(ChatColor.RED + "Players only"); return true;
             }
 
             if (!p.isOp() && !p.hasPermission("leaderboard.reload"))
             {
-                p.sendMessage(ChatColor.RED + "You don't have permission."); return true;
+                p.sendMessage(ChatColor.RED + "You don't have permission to do that"); return true;
             }
 
             long start = System.currentTimeMillis();
@@ -285,18 +318,18 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
         {
             if (!(sender instanceof Player p))
             {
-                sender.sendMessage(ChatColor.RED + "Players only."); return true;
+                sender.sendMessage(ChatColor.RED + "Players only"); return true;
             }
 
             if (!p.isOp() && !p.hasPermission("leaderboard.clear"))
             {
-                p.sendMessage(ChatColor.RED + "You don't have permission."); return true;
+                p.sendMessage(ChatColor.RED + "You don't have permission to do that"); return true;
             }
 
             Block target = p.getTargetBlockExact(6);
             if (target == null || target.getType() != Material.BEDROCK)
             {
-                p.sendMessage(ChatColor.RED + "Look at a bedrock block within ~6 blocks."); return true;
+                p.sendMessage(ChatColor.RED + "Look at a bedrock block within 6 blocks"); return true;
             }
 
             Location loc = target.getLocation();
@@ -304,7 +337,7 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
 
             if (typeOpt.isEmpty())
             {
-                p.sendMessage(ChatColor.GRAY + "No leaderboard is assigned to this bedrock."); return true;
+                p.sendMessage(ChatColor.GRAY + "No leaderboard is assigned to this bedrock"); return true;
             }
 
             String type = typeOpt.get();
@@ -334,29 +367,32 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event)
     {
-        if (event.getHand() != EquipmentSlot.HAND || event.getClickedBlock() == null) return;
-        if (event.getClickedBlock().getType() != Material.BEDROCK) return;
+        if (event.getHand() != EquipmentSlot.HAND)
+            return;
 
-        Player player = event.getPlayer();
-        Location loc = event.getClickedBlock().getLocation();
-        Optional<String> typeOpt = findLeaderboardTypeByLocation(loc);
+        if (event.getClickedBlock() == null)
+            return;
+
+        if (event.getClickedBlock().getType() != Material.BEDROCK)
+            return;
+
+        final Location loc = event.getClickedBlock().getLocation();
+        final Optional<String> typeOpt = findLeaderboardTypeByLocation(loc);
 
         if (typeOpt.isEmpty())
-        {
-            player.sendMessage(ChatColor.GRAY + "No leaderboard is assigned to this bedrock.");
             return;
-        }
 
-        String type = typeOpt.get();
-        ItemStack item = player.getInventory().getItemInMainHand();
+        final String type = typeOpt.get();
+        final Player player = event.getPlayer();
+        final ItemStack item = player.getInventory().getItemInMainHand();
 
-        switch (type)
+        switch (type.toLowerCase(Locale.ROOT))
         {
             case "diamond":
             {
                 if (item.getType() != Material.DIAMOND)
                 {
-                    player.sendMessage(ChatColor.RED + "Only " + ChatColor.AQUA + "" + ChatColor.MAGIC + "S" + ChatColor.AQUA + "diamonds" + ChatColor.MAGIC + "S" + ChatColor.RED + " can be sacrificed!");
+                    player.sendMessage(ChatColor.RED + "Hold " + ChatColor.AQUA + "diamonds" + ChatColor.RED + " to submit");
                     return;
                 }
 
@@ -367,35 +403,59 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                 dataConfig.set(base + ".diamonds", newTotal);
                 dataConfig.set(base + ".name", player.getName());
                 saveData();
-                player.sendMessage(ChatColor.RED + "You sacrificed " + ChatColor.AQUA + count + ChatColor.RED + " diamond(s)!");
-                updateLeaderboardDisplay("diamond");
+                player.sendMessage(ChatColor.RED + "You sacrificed " + ChatColor.AQUA + count + ChatColor.RED + " diamond(s)");
                 break;
             }
 
             case "elytra":
             {
-                if (!consumeOneMainHand(player, Material.PHANTOM_MEMBRANE))
+                if (item.getType() != Material.PHANTOM_MEMBRANE)
                 {
-                    player.sendMessage(ChatColor.RED + "You must hold " + ChatColor.AQUA + "a Phantom Membrane"
-                            + ChatColor.RED + " to submit your flight distance!");
+                    player.sendMessage(ChatColor.RED + "Hold a " + ChatColor.AQUA + "phantom membrane" + ChatColor.RED + " to submit");
                     return;
                 }
 
+                //consume 1 membrane
+                if (item.getAmount() > 1) item.setAmount(item.getAmount() - 1);
+                else player.getInventory().setItemInMainHand(null);
+
                 int flownCm = player.getStatistic(org.bukkit.Statistic.AVIATE_ONE_CM);
                 String base = "players." + player.getUniqueId();
-                int prev = dataConfig.getInt(base + ".elytra_flown_cm", 0);
-                int best = Math.max(prev, flownCm);
+                int best = Math.max(dataConfig.getInt(base + ".elytra_flown_cm", 0), flownCm);
                 dataConfig.set(base + ".elytra_flown_cm", best);
                 dataConfig.set(base + ".name", player.getName());
                 saveData();
-                player.sendMessage(ChatColor.GREEN + "Submitted Elytra flight distance: " + ChatColor.AQUA + formatDistance(best) + ChatColor.GREEN + " (best)");
-                updateLeaderboardDisplay("elytra");
+                player.sendMessage(ChatColor.GREEN + "Submitted: " + ChatColor.AQUA + formatDistance(best));
                 break;
             }
 
-            default:
-                player.sendMessage(ChatColor.RED + "This leaderboard type isn’t implemented yet: " + type);
+            case "reinforced":
+            {
+                if (item.getType() != Material.GOLD_INGOT)
+                {
+                    player.sendMessage(ChatColor.RED + "Hold a " + ChatColor.GOLD + "gold ingot" + ChatColor.RED + " to submit");
+                    return;
+                }
+
+                //consume 1 ingot
+                if (item.getAmount() > 1) item.setAmount(item.getAmount() - 1);
+                else player.getInventory().setItemInMainHand(null);
+
+                //vanilla stat
+                int used = player.getStatistic(org.bukkit.Statistic.USE_ITEM, Material.REINFORCED_DEEPSLATE);
+                String base = "players." + player.getUniqueId();
+                dataConfig.set(base + ".reinforced_placed", used);
+                dataConfig.set(base + ".name", player.getName());
+                saveData();
+                player.sendMessage(ChatColor.GREEN + "Submitted lootboxes opened: " + ChatColor.AQUA + used);
+                updateLeaderboardDisplay("reinforced");
+                break;
+            }
         }
+
+        //place this leaderboard and re/start passive effect
+        updateLeaderboardDisplay(type);
+        startBedrockEffect(loc.clone(), type);
     }
 
     private void updateLeaderboardDisplay(String type)
@@ -431,6 +491,11 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                     value = dataConfig.getInt("players." + uuid + ".elytra_flown_cm", 0);
                 }
 
+                else if ("reinforced".equalsIgnoreCase(type))
+                {
+                    value = dataConfig.getInt("players." + uuid + ".reinforced_placed", 0);
+                }
+
                 if (value > 0) totals.put(name, value);
             }
         }
@@ -449,14 +514,34 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                 {
                     p.playSound(p.getLocation(), Sound.EVENT_RAID_HORN, 10.0f, 1.0f);
                 }
-                Bukkit.broadcastMessage(ChatColor.RED + "A new " + (type.equalsIgnoreCase("elytra") ? "Sun Chaser" : "Diamond Killer") + " has been crowned!");
+
+                String crownLabel;
+
+                if ("elytra".equalsIgnoreCase(type))
+                {
+                    crownLabel = "Sun Chaser";
+                }
+
+                else if ("reinforced".equalsIgnoreCase(type))
+                {
+                    crownLabel = "High Roller";
+                }
+
+                else
+                {
+                    crownLabel = "Diamond Killer";
+                }
+
+                Bukkit.broadcastMessage(ChatColor.RED + "A new " + crownLabel + " has been crowned!");
             }
+
             lastTopByType.put(type, currentTop);
         }
 
         //title + lines
         Location base = lbLoc.clone().add(0.5, 1.2, 0.5);
-        String title = type.equals("elytra") ? ChatColor.AQUA + "Distance by Elytra" : ChatColor.RED + "" + ChatColor.MAGIC + "a" + ChatColor.AQUA + "Diamond Killers" + ChatColor.RED + "" + ChatColor.MAGIC + "a";
+        String title = type.equals("elytra") ? ChatColor.AQUA + "Distance by Elytra" : type.equals("reinforced") ? ChatColor.DARK_AQUA + "Lootboxes Opened" : ChatColor.RED + "" + ChatColor.MAGIC + "a" + ChatColor.AQUA + "Diamond Killers" + ChatColor.RED + "" + ChatColor.MAGIC + "a";
+
         spawnTextLine(type, base.clone(), yaw, title);
         spawnTextLine(type, base.clone().add(0, 0.25, 0), yaw, " ");
 
@@ -469,7 +554,7 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
             Map.Entry<String, Integer> entry = top.get(i);
             ChatColor color = (i < rankColors.length) ? rankColors[i] : ChatColor.WHITE;
             String name = entry.getKey();
-            double yOffset = (top.size() - i + 1) * 0.25; // #1 on top
+            double yOffset = (top.size() - i + 1) * 0.25; //#1 on top
             String valueText;
 
             if ("elytra".equalsIgnoreCase(type))
@@ -533,7 +618,8 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                     case "elytra":
                     {
                         //elytra passive effects
-                        for (double angle = 0; angle < 2 * Math.PI; angle += Math.PI / 10) {
+                        for (double angle = 0; angle < 2 * Math.PI; angle += Math.PI / 10)
+                        {
                             double r = 0.5;
                             double x = r * Math.cos(angle + t);
                             double z = r * Math.sin(angle + t);
@@ -551,7 +637,8 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                     }
 
                     case "diamond":
-                    default: {
+                    default:
+                    {
                         //diamond killer passive effects
                         for (double angle = 0; angle < 2 * Math.PI; angle += Math.PI / 8)
                         {
@@ -563,6 +650,23 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
 
                         Location center = loc.clone().add(0.5, 1.0, 0.5);
                         world.spawnParticle(Particle.REVERSE_PORTAL, center, 5, 0.3, 0.5, 0.3, 0.01);
+                        break;
+                    }
+
+                    case "reinforced":
+                    {
+                        //sculk aura
+                        for (double a = 0; a < 2 * Math.PI; a += Math.PI / 10)
+                        {
+                            double r = 0.45;
+                            double x = r * Math.cos(a + t);
+                            double z = r * Math.sin(a + t);
+                            Location p = loc.clone().add(0.5 + x, 0.88 + (Math.sin(t + a) * 0.08), 0.5 + z);
+                            world.spawnParticle(Particle.SCULK_SOUL, p, 0, 0, 0.01, 0, 0.0);
+                        }
+
+                        //shimmer near center
+                        world.spawnParticle(Particle.SOUL_FIRE_FLAME, loc.clone().add(0.5, 0.98, 0.5), 1, 0.08, 0.05, 0.08, 0.0);
                         break;
                     }
                 }
@@ -672,8 +776,7 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
         }.runTaskTimer(this, 0L, 20L); // every 20 ticks = 1 second
     }
 
-    //textDisplay spawner that uses legacy colored strings
-    //falls back to ArmorStand if TextDisplay APIs arent present at runtime (which was an issue i think?)
+    //textDisplay spawner
     private void spawnTextLine(String type, Location loc, float yaw, String coloredText)
     {
         try
@@ -812,7 +915,7 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                 //vertical offset down for the burst
                 Location base = effectLoc.clone().add(0, -0.15, 0);
 
-                //radial puff of clouds
+                //puff of clouds
                 for (int i = 0; i < 24; i++)
                 {
                     double ang = (i / 24.0) * (Math.PI * 2);
@@ -825,12 +928,12 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                 //soft sparkles
                 w.spawnParticle(Particle.END_ROD, base.clone().add(0, 0.18, 0), 10, 0.30, 0.22, 0.30, 0.0);
 
-                // quick chime
+                //quick chime
                 for (Player p : Bukkit.getOnlinePlayers())
                 {
                     if (!p.getWorld().equals(w) || p.getLocation().distance(base) > 16) continue;
 
-                    //amethyst bell + xp twinkle
+                    //amethyst bell/xp twinkle
                     try
                     {
                         p.playSound(base, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.9f, 1.20f);
@@ -861,6 +964,21 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                 world.spawnParticle(Particle.LAVA, effectLoc, 8, 0.2, 0.2, 0.2, 0.01);
                 world.spawnParticle(Particle.SMOKE, effectLoc, 6, 0.4, 0.2, 0.4, 0.01);
                 world.spawnParticle(Particle.EXPLOSION, effectLoc, 1);
+                break;
+            }
+
+            case "reinforced":
+            {
+                //sculk burst (no explosion)
+                world.spawnParticle(Particle.SCULK_SOUL, effectLoc, 30, 0.45, 0.28, 0.45, 0.0);
+                world.spawnParticle(Particle.SOUL_FIRE_FLAME, effectLoc, 10, 0.28, 0.18, 0.28, 0.01);
+                for (Player p : Bukkit.getOnlinePlayers())
+                {
+                    if (p.getWorld().equals(world) && p.getLocation().distance(effectLoc) <= 16)
+                    {
+                        p.playSound(effectLoc, Sound.BLOCK_SCULK_SENSOR_CLICKING, 0.7f, 1.25f);
+                    }
+                }
                 break;
             }
         }
@@ -909,6 +1027,26 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
             }
 
             w.spawnParticle(Particle.END_ROD, loc.clone().add(0.5, 1.00, 0.5), 2, 0.22, 0.22, 0.22, 0.0);
+        });
+
+        EFFECTS.put("reinforced", (w, loc, t) ->
+        {
+            double baseY = 0.95;
+            for (double a = 0; a < Math.PI * 2; a += Math.PI / 12)
+            {
+                double r = 1.2 + 0.1 * Math.sin(t * 0.75 + a * 2);
+                double x = r * Math.cos(a + t * 0.25);
+                double z = r * Math.sin(a + t * 0.25);
+
+                //shimmering ring
+                w.spawnParticle(Particle.PORTAL, loc.clone().add(0.5 + x, baseY, 0.5 + z), 2, 0.03, 0.03, 0.03, 0.0);
+
+                //occasional spark
+                if (((int)(t * 8 + a * 10)) % 28 == 0)
+                {
+                    w.spawnParticle(Particle.TOTEM_OF_UNDYING, loc.clone().add(0.5 + x * 0.9, baseY + 0.15, 0.5 + z * 0.9), 2, 0.02, 0.02, 0.02, 0.0);
+                }
+            }
         });
     }
 
@@ -1032,6 +1170,70 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
         if (stack == null || stack.getType() != mat) return false;
         p.getInventory().setItemInMainHand(null);
         return true;
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockPlace(BlockPlaceEvent e)
+    {
+        if (e.getBlockPlaced().getType() != Material.REINFORCED_DEEPSLATE) return;
+        Player p = e.getPlayer();
+        String base = "players." + p.getUniqueId();
+        int total = dataConfig.getInt(base + ".reinforced_placed_total", 0) + 1;
+        dataConfig.set(base + ".reinforced_placed_total", total);
+        dataConfig.set(base + ".name", p.getName());
+        saveData();
+    }
+
+    //going to use this for future leaderboards when a user uses an item to submit
+    private void playSubmitFx(String type, Location effectLoc)
+    {
+        World w = effectLoc.getWorld();
+        switch (type.toLowerCase(java.util.Locale.ROOT))
+        {
+            case "reinforced":
+            {
+                w.spawnParticle(Particle.SCULK_SOUL, effectLoc, 42, 0.5, 0.3, 0.5, 0.0);
+                w.spawnParticle(Particle.SOUL_FIRE_FLAME, effectLoc, 16, 0.35, 0.25, 0.35, 0.01);
+
+                for (Player p : Bukkit.getOnlinePlayers())
+                {
+                    if (p.getWorld().equals(w) && p.getLocation().distance(effectLoc) <= 16)
+                    {
+                        p.playSound(effectLoc, Sound.BLOCK_SCULK_SHRIEKER_SHRIEK, 0.7f, 1.0f);
+                        p.playSound(effectLoc, Sound.BLOCK_SCULK_SENSOR_CLICKING, 0.8f, 1.35f);
+                    }
+                }
+                break;
+            }
+
+            default: break;
+        }
+    }
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent e)
+    {
+        Player p = e.getPlayer();
+        String base = "players." + p.getUniqueId();
+
+        //only seed once on player join, to grab the data before plugin was initialized
+        if (!dataConfig.getBoolean(base + ".reinforced_seeded", false))
+        {
+            int vanilla = 0;
+
+            try
+            {
+                vanilla = p.getStatistic(Statistic.USE_ITEM, Material.REINFORCED_DEEPSLATE);
+            }
+
+            catch (Throwable ignored) {}
+            int current = dataConfig.getInt(base + ".reinforced_placed_total", 0);
+            int seeded = Math.max(current, vanilla); //keep whatever is larger
+            dataConfig.set(base + ".reinforced_placed_total", seeded);
+            dataConfig.set(base + ".name", p.getName());
+            dataConfig.set(base + ".reinforced_seeded", true);
+            saveData();
+        }
     }
 
     @EventHandler
