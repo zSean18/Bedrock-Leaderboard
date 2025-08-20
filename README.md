@@ -1,12 +1,12 @@
 # Bedrock Leaderboard
 
-A work-in-progress Paper/Spigot plugin that renders multiple bedrock-based leaderboards (Diamonds, Elytra distance, etc.) with unique effects and features.
+A work-in-progress Paper/Spigot plugin that transforms bedrock blocks into player leaderboards with unique effects and features.
 
 ## Current Leaderboards
 - **Diamond Killer** — players can flex how many diamonds they are wasting.  
   _(Players right-click the bedrock with the diamond(s) in hand to sacrifice them.)_
 
-- **Distance By Elytra** — players can submit their current flight distance.  
+- **Distance By Elytra** — players can submit their current flight distance. (Data from vanilla stat tracker)
   _(Players must right-click the bedrock with a phantom membrane in hand.)_
 
 ## Future Updates
@@ -24,7 +24,7 @@ A work-in-progress Paper/Spigot plugin that renders multiple bedrock-based leade
 - `/refreshleaderboard` — rebuilds text at the targeted bedrock.  
   _(Use `/refreshloot` & `/refreshleaderboard` in that order to manually change the leaderboard data without restarting the server.)_
 
-- `/rotateleaderboard [degrees]` — rotates the leaderboard text (default 90° increments).  
+- `/rotateleaderboard` — rotates the leaderboard text (default 90° increments).  
 - `/clearleaderboard` — removes leaderboard & effects from targeted bedrock.  
 
 ## License
