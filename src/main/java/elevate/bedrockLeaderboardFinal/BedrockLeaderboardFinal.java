@@ -90,7 +90,7 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
         startArmorStandVisibilityTask();
 
         //LEADERBOARD TYPES//
-        final List<String> TYPES = Arrays.asList("diamond", "elytra", "reinforced");
+        final List<String> TYPES = Arrays.asList("diamond", "elytra", "reinforced", "onfoot", "mined", "trades");
 
         //COMMAND// setleaderboard <type>
         Objects.requireNonNull(getCommand("setleaderboard")).setExecutor((sender, command, label, args) ->
@@ -132,7 +132,8 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
 
             if (target.getType() != Material.BEDROCK)
             {
-                p.sendMessage(ChatColor.RED + "That's not bedrock silly"); return true;
+                p.sendMessage(ChatColor.RED + "That's not bedrock silly");
+                return true;
             }
 
             //save location/yaw per type
@@ -199,7 +200,7 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
             return true;
         });
 
-        //COMMAND// rotateleaderboard [degrees]
+        //COMMAND// /rotateleaderboard <degrees | +deg | -deg>
         Objects.requireNonNull(getCommand("rotateleaderboard")).setExecutor((sender, cmd, label, args) ->
         {
             if (!(sender instanceof Player player))
@@ -214,22 +215,6 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                 return true;
             }
 
-            float deltaYaw = 90f;
-
-            if (args.length >= 1)
-            {
-                try
-                {
-                    deltaYaw = Float.parseFloat(args[0]);
-                }
-
-                catch (NumberFormatException nfe)
-                {
-                    player.sendMessage(ChatColor.RED + "Usage: /rotateleaderboard [degrees]");
-                    return true;
-                }
-            }
-
             Block target = player.getTargetBlockExact(6);
 
             if (target == null || target.getType() != Material.BEDROCK)
@@ -239,59 +224,72 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
             }
 
             Optional<String> typeOpt = findLeaderboardTypeByLocation(target.getLocation());
-
             if (typeOpt.isEmpty())
             {
-                player.sendMessage(ChatColor.GRAY + "No leaderboard is assigned to this bedrock"); return true;
+                player.sendMessage(ChatColor.GRAY + "No leaderboard is assigned to this bedrock");
+                return true;
             }
 
             String type = typeOpt.get();
-            float storedYaw = (float) dataConfig.getDouble("leaderboards." + type + ".yaw", 0.0);
-            float newStored = normalizeYaw(storedYaw + deltaYaw);
-            dataConfig.set("leaderboards." + type + ".yaw", newStored);
+
+            // Show current yaw if no argument
+            if (args.length == 0) {
+                float current = (float) dataConfig.getDouble("leaderboards." + type + ".yaw", 0.0);
+                player.sendMessage(ChatColor.GREEN + "Current rotation for " + ChatColor.AQUA + type
+                        + ChatColor.GREEN + " is " + ChatColor.AQUA + current + "°");
+                player.sendMessage(ChatColor.GRAY + "Use: /rotateleaderboard <degrees | +deg | -deg>");
+                return true;
+            }
+
+            String arg = args[0].trim();
+            boolean relative = arg.startsWith("+") || arg.startsWith("-");
+            float inputDeg;
+            try {
+                inputDeg = Float.parseFloat(arg);
+            } catch (NumberFormatException e) {
+                player.sendMessage(ChatColor.RED + "Usage: /rotateleaderboard <degrees | +deg | -deg>");
+                return true;
+            }
+
+            float storedYaw = (float) dataConfig.getDouble("leaderboards." + type + ".yaw", 0.0f);
+            float newYaw = relative ? normalizeYaw(storedYaw + inputDeg) : normalizeYaw(inputDeg);
+
+            dataConfig.set("leaderboards." + type + ".yaw", newYaw);
             saveData();
 
-            //rotate existing nearby lines
+            // Rotate existing nearby lines immediately
             Location base = target.getLocation().add(0.5, 1.0, 0.5);
             int rotated = 0;
-            for (Entity e : base.getWorld().getNearbyEntities(base, 1.5, 3.0, 1.5))
-            {
-                if (!isLeaderboardEntity(e))
-                    continue;
+            for (Entity e : base.getWorld().getNearbyEntities(base, 1.5, 3.0, 1.5)) {
+                if (!isLeaderboardEntity(e)) continue;
 
-                try
-                {
-                    if (e instanceof TextDisplay td)
-                    {
-                        try
-                        {
-                            td.setRotation(newStored, 0f);
-                        }
-
-                        catch (Throwable ignored) {} rotated++;
-
+                try {
+                    if (e instanceof TextDisplay td) {
+                        try { td.setRotation(newYaw, 0f); } catch (Throwable ignored) {}
+                        rotated++;
                         continue;
                     }
-                }
+                } catch (Throwable ignored) {}
 
-                catch (Throwable ignored) {}
-
-                if (e instanceof ArmorStand as)
-                {
+                if (e instanceof ArmorStand as) {
                     Location l = as.getLocation().clone();
-                    l.setYaw(newStored);
+                    l.setYaw(newYaw);
                     as.teleport(l);
                     rotated++;
                 }
             }
 
-            player.sendMessage(ChatColor.GREEN + "Rotation set to " + ChatColor.AQUA + newStored + "°" + ChatColor.GREEN + " for " + ChatColor.AQUA + type + ChatColor.GREEN + " (" + rotated + " line(s) updated).");
+            player.sendMessage(ChatColor.GREEN + (relative ? "Rotated by " : "Set rotation to ")
+                    + ChatColor.AQUA + (relative ? inputDeg : newYaw) + "°"
+                    + ChatColor.GREEN + " for " + ChatColor.AQUA + type
+                    + ChatColor.GREEN + " (" + rotated + " line(s) updated).");
 
-            if (rotated == 0)
+            if (rotated == 0) {
                 player.sendMessage(ChatColor.YELLOW + "No leaderboard text found near that bedrock");
-
+            }
             return true;
         });
+
 
         //COMMAND// refreshloot (reload data.yml from plugin's folder)
         Objects.requireNonNull(getCommand("refreshloot")).setExecutor((sender, cmd, label, args) ->
@@ -451,6 +449,82 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                 updateLeaderboardDisplay("reinforced");
                 break;
             }
+
+            case "onfoot":
+            {
+                //require exactly 1 Leather Boots to submit
+                if (item.getType() != Material.LEATHER)
+                {
+                    player.sendMessage(ChatColor.RED + "Hold " + ChatColor.GOLD + "Leather" + ChatColor.RED + " to submit");
+                    return;
+                }
+                // consume 1 item
+                if (item.getAmount() > 1) item.setAmount(item.getAmount() - 1);
+                else player.getInventory().setItemInMainHand(null);
+
+                // vanilla stats (centimeters)
+                int walk = player.getStatistic(Statistic.WALK_ONE_CM);
+                int sprint = 0;
+                try { sprint = player.getStatistic(Statistic.SPRINT_ONE_CM); } catch (Throwable ignore) {}
+                int totalCm = walk + sprint;
+
+                String base = "players." + player.getUniqueId();
+                int best = Math.max(dataConfig.getInt(base + ".onfoot_cm", 0), totalCm);
+                dataConfig.set(base + ".onfoot_cm", best);
+                dataConfig.set(base + ".name", player.getName());
+                saveData();
+
+                player.sendMessage(ChatColor.GREEN + "Submitted on-foot distance: " + ChatColor.AQUA + formatDistance(best));
+                updateLeaderboardDisplay("onfoot");
+                break;
+            }
+
+            case "mined":
+            {
+                if (item.getType() != Material.GOLDEN_PICKAXE)
+                {
+                    player.sendMessage(ChatColor.RED + "Hold a " + ChatColor.AQUA + "Golden Pickaxe" + ChatColor.RED + " to submit.");
+                    return;
+                }
+
+                if (item.getAmount() > 1) item.setAmount(item.getAmount() - 1);
+                else player.getInventory().setItemInMainHand(null);
+
+                int used = getTotalPickaxeUses(player);
+                String base = "players." + player.getUniqueId();
+                dataConfig.set(base + ".mined_blocks", used);
+                dataConfig.set(base + ".name", player.getName());
+                saveData();
+
+                player.sendMessage(ChatColor.GREEN + "Submitted blocks mined: " + ChatColor.AQUA + used);
+                updateLeaderboardDisplay("mined");
+                break;
+            }
+
+            case "trades": {
+                if (item.getType() != Material.EMERALD) {
+                    player.sendMessage(ChatColor.RED + "Hold an " + ChatColor.GREEN + "Emerald" + ChatColor.RED + " to submit.");
+                    return;
+                }
+
+                // consume 1 emerald
+                if (item.getAmount() > 1) item.setAmount(item.getAmount() - 1);
+                else player.getInventory().setItemInMainHand(null);
+
+                // vanilla stat
+                int trades = 0;
+                try { trades = player.getStatistic(Statistic.TRADED_WITH_VILLAGER); } catch (Throwable ignored) {}
+
+                String base = "players." + player.getUniqueId();
+                dataConfig.set(base + ".trades", trades);
+                dataConfig.set(base + ".name", player.getName());
+                saveData();
+
+                player.sendMessage(ChatColor.GREEN + "Submitted villager trades: " + ChatColor.AQUA + trades);
+                updateLeaderboardDisplay("trades");
+                break;
+            }
+
         }
 
         //place this leaderboard and re/start passive effect
@@ -496,6 +570,22 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                     value = dataConfig.getInt("players." + uuid + ".reinforced_placed", 0);
                 }
 
+                else if ("onfoot".equalsIgnoreCase(type))
+                {
+                    value = dataConfig.getInt("players." + uuid + ".onfoot_cm", 0);
+                }
+
+                else if ("mined".equalsIgnoreCase(type))
+                {
+                    value = dataConfig.getInt("players." + uuid + ".mined_blocks", 0);
+                }
+
+                else if ("trades".equalsIgnoreCase(type))
+                {
+                    value = dataConfig.getInt("players." + uuid + ".trades", 0);
+                }
+
+
                 if (value > 0) totals.put(name, value);
             }
         }
@@ -512,25 +602,16 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
             {
                 for (Player p : Bukkit.getOnlinePlayers())
                 {
-                    p.playSound(p.getLocation(), Sound.EVENT_RAID_HORN, 10.0f, 1.0f);
+                    p.playSound(p.getLocation(), Sound.EVENT_RAID_HORN, 15.0f, 4.0f);
                 }
 
                 String crownLabel;
-
-                if ("elytra".equalsIgnoreCase(type))
-                {
-                    crownLabel = "Sun Chaser";
-                }
-
-                else if ("reinforced".equalsIgnoreCase(type))
-                {
-                    crownLabel = "High Roller";
-                }
-
-                else
-                {
-                    crownLabel = "Diamond Killer";
-                }
+                if ("elytra".equalsIgnoreCase(type))          crownLabel = "Sun Chaser";
+                else if ("reinforced".equalsIgnoreCase(type)) crownLabel = "High Roller";
+                else if ("onfoot".equalsIgnoreCase(type))     crownLabel = "Trailblazer";
+                else if ("mined".equalsIgnoreCase(type))      crownLabel = "Mining Professional";
+                else if ("trades".equalsIgnoreCase(type))     crownLabel = "Master Merchant";
+                else                                          crownLabel = "Diamond Killer";
 
                 Bukkit.broadcastMessage(ChatColor.RED + "A new " + crownLabel + " has been crowned!");
             }
@@ -540,7 +621,15 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
 
         //title + lines
         Location base = lbLoc.clone().add(0.5, 1.2, 0.5);
-        String title = type.equals("elytra") ? ChatColor.AQUA + "Distance by Elytra" : type.equals("reinforced") ? ChatColor.DARK_AQUA + "Lootboxes Opened" : ChatColor.RED + "" + ChatColor.MAGIC + "a" + ChatColor.AQUA + "Diamond Killers" + ChatColor.RED + "" + ChatColor.MAGIC + "a";
+        String title =
+                        type.equals("elytra")     ? ChatColor.AQUA + "Distance by Elytra" :
+                        type.equals("reinforced") ? ChatColor.DARK_AQUA + "Lootboxes Opened" :
+                        type.equals("onfoot")     ? ChatColor.GREEN + "Distance on Foot" :
+                        type.equals("mined")      ? ChatColor.YELLOW + "Blocks Mined" :
+                        type.equals("trades")     ? ChatColor.GREEN + "Villager Trades" :
+                        ChatColor.RED + "" + ChatColor.MAGIC + "a" + ChatColor.AQUA + "Diamond Killers" + ChatColor.RED + "" + ChatColor.MAGIC + "a";
+
+
 
         spawnTextLine(type, base.clone(), yaw, title);
         spawnTextLine(type, base.clone().add(0, 0.25, 0), yaw, " ");
@@ -557,7 +646,7 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
             double yOffset = (top.size() - i + 1) * 0.25; //#1 on top
             String valueText;
 
-            if ("elytra".equalsIgnoreCase(type))
+            if ("elytra".equalsIgnoreCase(type) || "onfoot".equalsIgnoreCase(type))
             {
                 valueText = formatDistance(entry.getValue());
             }
@@ -592,7 +681,7 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
 
     private void startBedrockEffect(Location loc, String type)
     {
-        //stop any old task for this type first, this stops things from fucking up which is a great thing
+        //stop any old task for this type first
         stopBedrockEffect(type);
 
         BukkitTask task = new BukkitRunnable()
@@ -613,63 +702,13 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                 World world = loc.getWorld();
                 t += Math.PI / 16;
 
-                switch (type.toLowerCase(Locale.ROOT))
+                // Use registered effect; fall back to default if missing
+                Effect fx = EFFECTS.getOrDefault(type.toLowerCase(Locale.ROOT), EFFECTS.get("default"));
+                if (fx != null)
                 {
-                    case "elytra":
-                    {
-                        //elytra passive effects
-                        for (double angle = 0; angle < 2 * Math.PI; angle += Math.PI / 10)
-                        {
-                            double r = 0.5;
-                            double x = r * Math.cos(angle + t);
-                            double z = r * Math.sin(angle + t);
-                            Location p = loc.clone().add(0.5 + x, 0.70 + (Math.sin(t + angle) * 0.12), 0.5 + z);
-                            world.spawnParticle(Particle.CLOUD, p, 0, 0, 0.02, 0, 0.0);
-                        }
-
-                        world.spawnParticle(Particle.END_ROD, loc.clone().add(0.5, 0.85, 0.5), 2, 0.22, 0.25, 0.22, 0.0);
-
-                        if (((int) (t * 8)) % 16 == 0)
-                        {
-                            world.spawnParticle(Particle.SWEEP_ATTACK, loc.clone().add(0.5, 0.85, 0.5), 1, 0, 0, 0, 0);
-                        }
-                        break;
-                    }
-
-                    case "diamond":
-                    default:
-                    {
-                        //diamond killer passive effects
-                        for (double angle = 0; angle < 2 * Math.PI; angle += Math.PI / 8)
-                        {
-                            double x = 0.5 * Math.cos(angle + t);
-                            double z = 0.5 * Math.sin(angle + t);
-                            Location flameLoc = loc.clone().add(0.5 + x, 1.0, 0.5 + z);
-                            world.spawnParticle(Particle.FLAME, flameLoc, 1, 0, 0, 0, 0);
-                        }
-
-                        Location center = loc.clone().add(0.5, 1.0, 0.5);
-                        world.spawnParticle(Particle.REVERSE_PORTAL, center, 5, 0.3, 0.5, 0.3, 0.01);
-                        break;
-                    }
-
-                    case "reinforced":
-                    {
-                        //sculk aura
-                        for (double a = 0; a < 2 * Math.PI; a += Math.PI / 10)
-                        {
-                            double r = 0.45;
-                            double x = r * Math.cos(a + t);
-                            double z = r * Math.sin(a + t);
-                            Location p = loc.clone().add(0.5 + x, 0.88 + (Math.sin(t + a) * 0.08), 0.5 + z);
-                            world.spawnParticle(Particle.SCULK_SOUL, p, 0, 0, 0.01, 0, 0.0);
-                        }
-
-                        //shimmer near center
-                        world.spawnParticle(Particle.SOUL_FIRE_FLAME, loc.clone().add(0.5, 0.98, 0.5), 1, 0.08, 0.05, 0.08, 0.0);
-                        break;
-                    }
+                    fx.tick(world, loc, t);
                 }
+
             }
         }.runTaskTimer(this, 0L, 5L);
         activeEffects.put(type, task);
@@ -981,6 +1020,53 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
                 }
                 break;
             }
+
+            case "onfoot":
+            {
+                // dust kick burst
+                world.spawnParticle(Particle.CLOUD, effectLoc, 28, 0.45, 0.10, 0.45, 0.0);
+                world.spawnParticle(Particle.ASH,   effectLoc, 16, 0.35, 0.06, 0.35, 0.0);
+
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (!p.getWorld().equals(world) || p.getLocation().distance(effectLoc) > 16) continue;
+                    // quick, light “step” sounds
+                    p.playSound(effectLoc, Sound.BLOCK_GRASS_STEP, 0.8f, 1.1f);
+                    p.playSound(effectLoc, Sound.BLOCK_GRAVEL_STEP, 0.5f, 1.0f);
+                }
+                break;
+            }
+
+            case "mined":
+            {
+                // dusty burst + clink
+                try {
+                    org.bukkit.block.data.BlockData stone = Bukkit.createBlockData(Material.STONE);
+                    world.spawnParticle(Particle.BLOCK_CRUMBLE, effectLoc, 50, 0.45, 0.25, 0.45, 0.0, stone);
+                } catch (Throwable ignored) {
+                    world.spawnParticle(Particle.ASH, effectLoc, 30, 0.45, 0.20, 0.45, 0.0);
+                }
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (!p.getWorld().equals(world) || p.getLocation().distance(effectLoc) > 16) continue;
+                    p.playSound(effectLoc, Sound.BLOCK_STONE_BREAK, 0.9f, 1.05f);
+                    p.playSound(effectLoc, Sound.ITEM_AXE_SCRAPE, 0.5f, 1.2f); // metallic scrape “clink”
+                }
+                break;
+            }
+
+            case "trades":
+            {
+                // Emerald-y green happy burst
+                world.spawnParticle(Particle.HAPPY_VILLAGER, effectLoc, 24, 0.45, 0.35, 0.45, 0.0);
+                world.spawnParticle(Particle.END_ROD,        effectLoc, 8,  0.25, 0.20, 0.25, 0.0);
+
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (!p.getWorld().equals(world) || p.getLocation().distance(effectLoc) > 16) continue;
+                    // Villager “yes” + soft chime
+                    p.playSound(effectLoc, Sound.ENTITY_VILLAGER_YES, 0.9f, 1.1f);
+                    try { p.playSound(effectLoc, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.5f, 1.3f); } catch (Throwable ignored) {}
+                }
+                break;
+            }
         }
     }
 
@@ -1029,25 +1115,111 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
             w.spawnParticle(Particle.END_ROD, loc.clone().add(0.5, 1.00, 0.5), 2, 0.22, 0.22, 0.22, 0.0);
         });
 
-        EFFECTS.put("reinforced", (w, loc, t) ->
-        {
-            double baseY = 0.95;
-            for (double a = 0; a < Math.PI * 2; a += Math.PI / 12)
-            {
-                double r = 1.2 + 0.1 * Math.sin(t * 0.75 + a * 2);
-                double x = r * Math.cos(a + t * 0.25);
-                double z = r * Math.sin(a + t * 0.25);
+        EFFECTS.put("reinforced", (w, loc, t) -> {
+            // Center of the bedrock block
+            Location c = loc.clone().add(0.5, 0.0, 0.5);
 
-                //shimmering ring
-                w.spawnParticle(Particle.PORTAL, loc.clone().add(0.5 + x, baseY, 0.5 + z), 2, 0.03, 0.03, 0.03, 0.0);
+            double r = 0.48;
+            int bands = 8;
+            double y0 = 0.10;
+            double y1 = 1.00;
+            double stepY = (y1 - y0) / (bands - 1);
 
-                //occasional spark
-                if (((int)(t * 8 + a * 10)) % 28 == 0)
-                {
-                    w.spawnParticle(Particle.TOTEM_OF_UNDYING, loc.clone().add(0.5 + x * 0.9, baseY + 0.15, 0.5 + z * 0.9), 2, 0.02, 0.02, 0.02, 0.0);
+            // Slow, gentle twist up the column
+            double twist = t * 0.6;
+
+            for (int i = 0; i < bands; i++) {
+                double y = y0 + i * stepY;
+                double a = twist + i * 0.7;
+                double x = r * Math.cos(a);
+                double z = r * Math.sin(a);
+
+                // faint shimmer hugging the block edge
+                w.spawnParticle(Particle.REVERSE_PORTAL, c.clone().add(x, y, z), 1, 0.02, 0.02, 0.02, 0.0);
+
+                // sparse sculk accents
+                if (((int)(t * 8 + i)) % 12 == 0) {
+                    w.spawnParticle(Particle.SCULK_SOUL, c.clone().add(x * 0.96, y + 0.02, z * 0.96), 1, 0.0, 0.0, 0.0, 0.0);
                 }
             }
         });
+
+
+        EFFECTS.put("onfoot", (w, loc, t) -> {
+            // Keep it low and subtle
+            Location base = loc.clone().add(0.5, 0.72, 0.5);
+
+            // Only render every 3rd tick to reduce intensity
+            if (((int)(t * 8)) % 3 != 0) return;
+
+            // Small ring, few points, slow drift
+            int points = 8;                      // was ~20+
+            double radius = 0.55 + 0.04 * Math.sin(t * 0.5);
+            for (int i = 0; i < points; i++) {
+                double a = i * (2 * Math.PI / points);
+                double x = radius * Math.cos(a);
+                double z = radius * Math.sin(a);
+                // very small vertical & velocity so it hugs the ground
+                w.spawnParticle(Particle.CLOUD, base.clone().add(x, 0.04, z), 0, 0, 0.003, 0, 0.0);
+            }
+
+            // Occasional light ash at the center
+            if (((int)(t * 8)) % 12 == 0) {
+                w.spawnParticle(Particle.ASH, base.clone().add(0, 0.05, 0), 3, 0.25, 0.04, 0.25, 0.0);
+            }
+
+        });
+
+        EFFECTS.put("mined", (w, loc, t) -> {
+            // keep tight around the block, low intensity
+            Location base = loc.clone().add(0.5, 0.82, 0.5);
+
+            // small ring of dust, slow drift
+            int points = 10;
+            double radius = 0.52 + 0.03 * Math.sin(t * 0.4);
+            for (int i = 0; i < points; i++) {
+                double a = i * (2 * Math.PI / points) + t * 0.25;
+                double x = radius * Math.cos(a);
+                double z = radius * Math.sin(a);
+                try {
+                    org.bukkit.block.data.BlockData stone = Bukkit.createBlockData(Material.STONE);
+                    w.spawnParticle(Particle.SPORE_BLOSSOM_AIR, base.clone().add(x, 0.02, z), 1, 0.05, 0.02, 0.05, 0.0, stone);
+                } catch (Throwable ignored) {
+                    w.spawnParticle(Particle.ASH, base.clone().add(x, 0.02, z), 1, 0.05, 0.02, 0.05, 0.0);
+                }
+            }
+
+            //might not work well
+            if (((int)(t * 8)) % 18 == 0) {
+                try {
+                    org.bukkit.block.data.BlockData stone = Bukkit.createBlockData(Material.STONE);
+                    w.spawnParticle(Particle.TRIAL_SPAWNER_DETECTION_OMINOUS, base, 2, 0.15, 0.02, 0.15, 0.0, stone);
+                } catch (Throwable ignored) {
+                    w.spawnParticle(Particle.SMOKE, base, 2, 0.15, 0.02, 0.15, 0.0);
+                }
+            }
+        });
+
+        EFFECTS.put("trades", (w, loc, t) -> {
+            Location base = loc.clone().add(0.5, 0.95, 0.5);
+
+            //small ring with slow drift
+            int points = 8;
+            double radius = 0.48 + 0.03 * Math.sin(t * 0.5);
+            for (int i = 0; i < points; i++) {
+                double a = i * (2 * Math.PI / points) + t * 0.2;
+                double x = radius * Math.cos(a);
+                double z = radius * Math.sin(a);
+                w.spawnParticle(Particle.HAPPY_VILLAGER, base.clone().add(x, 0.02, z), 1, 0.02, 0.02, 0.02, 0.0);
+            }
+
+            //occasional sparkle in the center
+            if (((int)(t * 8)) % 20 == 0) {
+                w.spawnParticle(Particle.END_ROD, base.clone().add(0, 0.05, 0), 2, 0.15, 0.04, 0.15, 0.0);
+            }
+        });
+
+
     }
 
     private Location getLocFor(String type)
@@ -1235,6 +1407,31 @@ public final class BedrockLeaderboardFinal extends JavaPlugin implements Listene
             saveData();
         }
     }
+
+    private int getTotalPickaxeUses(Player p)
+    {
+        int total = 0;
+        Material[] picks =
+        {
+                Material.WOODEN_PICKAXE,
+                Material.STONE_PICKAXE,
+                Material.IRON_PICKAXE,
+                Material.GOLDEN_PICKAXE,
+                Material.DIAMOND_PICKAXE,
+                Material.NETHERITE_PICKAXE
+        };
+
+        for (Material m : picks)
+        {
+            try
+            {
+                total += p.getStatistic(Statistic.USE_ITEM, m);
+            }
+            catch (Throwable ignored) {}
+        }
+        return total;
+    }
+
 
     @EventHandler
     public void onChunkLoad(org.bukkit.event.world.ChunkLoadEvent event)

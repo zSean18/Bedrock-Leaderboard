@@ -24,7 +24,7 @@ commands:
 
   rotateleaderboard:
     description: Rotate the leaderboard text around the vertical axis
-    usage: /rotateleaderboard [degrees]
+    usage: /rotateleaderboard <degrees | +deg | -deg>
     permission: leaderboard.rotate
     permission-message: You don't have permission to do that.
 
